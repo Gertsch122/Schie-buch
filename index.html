@@ -851,7 +851,7 @@ function viewWaffen(){
         <div style="flex:1 1 160px;min-width:0"><label class="lbl" for="wn_${key}">Waffennummer</label><input class="field" id="wn_${key}" data-wn="${key}" maxlength="40" autocomplete="off" placeholder="optional" value="${esc(wn)}"></div>
         <label style="display:flex;align-items:center;gap:8px;min-height:44px;cursor:pointer"><input type="checkbox" data-wp="${key}" ${wp?'checked':''} style="width:22px;height:22px;accent-color:var(--ac)"> Persönliche Waffe</label>
       </div>${inspBlock(m)}
-      <div class="row" style="margin-top:10px"><button class="btn solid" type="button" data-akte="${key}">Waffenakte öffnen</button><button class="btn" type="button" data-fav="${key}" aria-pressed="${isFav(m)}">${isFav(m)?'★ Favorit entfernen':'☆ Als Favorit'}</button></div></div>`};
+      <div class="row" style="margin-top:10px"><button class="btn solid" type="button" data-akte="${key}">Waffenakte öffnen</button><button class="btn" type="button" data-fav="${key}" aria-pressed="${isFav(m)}">${isFav(m)?'★ Favorit entfernen':'☆ Als Favorit'}</button><button class="btn danger" type="button" data-delw="${key}">Waffe löschen</button></div></div>`};
   const cards=cats.map(c=>{const ms=Array.from(new Set(modelsFor(c).concat(E.filter(e=>e.weapon===c).map(wLabel))));
     if(!ms.length)return `<div class="sec"><span class="lbl">${esc(c)}</span><p class="status" style="margin:0">Noch keine Waffe. Im Formular unter „${esc(c)}“ über „+ Eigene Waffe“ eintragen.</p></div>`;
     return `<div class="sec"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px"><span class="lbl" style="margin:0">${esc(c)} (${ms.length})</span><button class="btn" type="button" data-addw="${esc(c)}">+ Waffe anlegen</button></div>
@@ -916,6 +916,7 @@ function viewWaffen(){
     const m=ins[0].value.trim(),nr=ins[1].value.trim(),cal=ins[2].value.trim();if(!m){toast('Bitte Bezeichnung der Waffe eintragen');return}
     const k=addWeapon(b.dataset.addok,m,nr,cal,{fav,pers:fav});store.saveSettings();renderProfile();toast(k+' angelegt');render()}));
   $('view').querySelectorAll('[data-akte]').forEach(b=>b.addEventListener('click',()=>{akteM=b.dataset.akte;location.hash='akte'}));
+  $('view').querySelectorAll('[data-delw]').forEach(b=>b.addEventListener('click',()=>{akteM=b.dataset.delw;akteDel=true;location.hash='akte'}));
   $('view').querySelectorAll('[data-fav]').forEach(b=>b.addEventListener('click',()=>{toggleFav(b.dataset.fav);render()}));
   $('view').querySelectorAll('[data-ip]').forEach(b=>b.addEventListener('click',()=>{const i=b.parentElement.querySelector('input[type=date]');const d=i&&i.value;if(!d){toast('Bitte Datum wählen');return}
     S.insp=S.insp||{};const a=S.insp[b.dataset.ip]=S.insp[b.dataset.ip]||[];if(!a.includes(d))a.push(d);store.saveSettings();toast('Überprüfung eingetragen');render()}));
@@ -1192,7 +1193,7 @@ function viewImport(){
   })});
 }
 /* ---------- WAFFENAKTE ---------- */
-let akteM=null;
+let akteM=null,akteDel=false;
 const MAINT_TYPES=['Jährliche Überprüfung','Wartung','Reparatur','Teiletausch','Kontrolle','Einschießen / Justieren','Sonstiges'];
 function akteEvents(m){const ev=[];
   E.filter(e=>wLabel(e)===m).forEach(e=>{
@@ -1256,7 +1257,17 @@ function viewAkte(){
     <select class="field" id="akMerge"><option value="">– Waffe wählen –</option>${L('weapons').map(c=>{const ms=Array.from(new Set(modelsFor(c).concat(E.filter(e=>e.weapon===c).map(wLabel)))).filter(x=>x&&x!==m);return ms.length?`<optgroup label="${esc(c)}">${ms.map(x=>`<option value="${esc(x)}">${esc((isFav(x)?'★ ':'')+wDisp(x))}</option>`).join('')}</optgroup>`:''}).join('')}</select>
     <div id="akMergeBox" style="margin-top:10px"></div>
   </div>
+  <div class="sec" id="akDelSec"><span class="lbl">Waffe löschen</span>
+    <p style="margin:0 0 10px">Löscht „${esc(wDisp(m))}“ komplett: die Waffe mit Nummer und Kaliber, alle ${A.days} Schusstag${A.days===1?'':'e'} (${A.shots} Schuss) mit Störungen sowie alle Waffenmeister-Einträge und Überprüfungen.</p>
+    <div class="row"><button class="btn danger" type="button" id="akDel">Waffe löschen …</button></div>
+    <div id="akDelBox" style="margin-top:10px"></div>
+  </div>
   <p class="status" id="syncState"></p>`;
+  const showDel=()=>{$('akDelBox').innerHTML=`<p style="margin:0 0 8px;color:var(--warn)"><b>Wirklich endgültig löschen?</b> ${A.days} Schusstag${A.days===1?'':'e'} (${A.shots} Schuss) und die gesamte Waffenakte von „${esc(wDisp(m))}“ werden gelöscht. Das kann nicht rückgängig gemacht werden. Tipp: Vorher unter Waffen › Export eine Sicherung speichern.</p><div class="row"><button class="btn danger" type="button" id="akDelGo">Endgültig löschen</button><button class="btn" type="button" id="akDelNo">Abbrechen</button></div>`;
+    $('akDelNo').addEventListener('click',()=>{$('akDelBox').innerHTML=''});
+    $('akDelGo').addEventListener('click',()=>deleteWeapon(m))};
+  $('akDel').addEventListener('click',showDel);
+  if(akteDel){akteDel=false;showDel();setTimeout(()=>{try{$('akDelSec').scrollIntoView({block:'start'})}catch(e){}},30)}
   $('akMerge').addEventListener('change',e=>{const t=e.target.value,box=$('akMergeBox');if(!t){box.innerHTML='';return}
     box.innerHTML=`<p style="margin:0 0 8px;color:var(--warn)">${A.days} Schusstag${A.days===1?'':'e'} (${A.shots} Schuss) und alle Akteneinträge von „${esc(wDisp(m))}“ werden zu „${esc(wDisp(t))}“ verschoben. Das lässt sich nicht automatisch rückgängig machen.</p><div class="row"><button class="btn danger" type="button" id="akMergeGo">Jetzt verschieben</button><button class="btn" type="button" id="akMergeNo">Abbrechen</button></div>`;
     $('akMergeNo').addEventListener('click',()=>{$('akMerge').value='';box.innerHTML=''});
@@ -1276,6 +1287,13 @@ function viewAkte(){
   $('akPdf').addEventListener('click',()=>aktePdf(m));
   setStatus();
 }
+async function deleteWeapon(m){
+  const n=E.filter(x=>wLabel(x)===m).length;
+  E=E.filter(x=>wLabel(x)!==m);
+  removeModel(m);
+  ['maint','insp','wnum','wpers','cal','base'].forEach(k=>{if(S[k])delete S[k][m]});
+  await store.saveSettings();renderProfile();if(F&&!F.id)F=null;
+  toast(wDisp(m)+' gelöscht'+(n?' ('+n+' Schusstag'+(n===1?'':'e')+')':''));akteM=null;location.hash='waffen'}
 async function mergeWeapon(from,to){
   const btn=$('akMergeGo');if(btn){btn.disabled=true;btn.textContent='Wird verschoben …'}
   const tc=catOfModel(to);const now=new Date().toISOString();const tn=(S.wnum||{})[to]||'';const tcal=calFor(to);let n=0;
