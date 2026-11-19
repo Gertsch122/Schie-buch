@@ -851,7 +851,7 @@ function viewWaffen(){
         <div style="flex:1 1 160px;min-width:0"><label class="lbl" for="wn_${key}">Waffennummer</label><input class="field" id="wn_${key}" data-wn="${key}" maxlength="40" autocomplete="off" placeholder="optional" value="${esc(wn)}"></div>
         <label style="display:flex;align-items:center;gap:8px;min-height:44px;cursor:pointer"><input type="checkbox" data-wp="${key}" ${wp?'checked':''} style="width:22px;height:22px;accent-color:var(--ac)"> Persönliche Waffe</label>
       </div>${inspBlock(m)}
-      <div class="row" style="margin-top:10px"><button class="btn solid" type="button" data-akte="${key}">Waffenakte öffnen</button><button class="btn" type="button" data-fav="${key}" aria-pressed="${isFav(m)}">${isFav(m)?'★ Favorit entfernen':'☆ Als Favorit'}</button><button class="btn danger" type="button" data-delw="${key}">Waffe löschen</button></div></div>`};
+      <div class="row" style="margin-top:10px"><button class="btn solid" type="button" data-akte="${key}">Waffenakte öffnen</button><button class="btn" type="button" data-fav="${key}" aria-pressed="${isFav(m)}">${isFav(m)?'★ Favorit entfernen':'☆ Als Favorit'}</button><button class="btn" type="button" data-pdfw="${key}" aria-expanded="${pdfW===m}">${pdfW===m?'PDF-Auswahl schließen':'PDF drucken'}</button><button class="btn danger" type="button" data-delw="${key}">Waffe löschen</button></div>${pdfW===m?perPanel(m,akteEvents(m)):''}</div>`};
   const cards=cats.map(c=>{const ms=Array.from(new Set(modelsFor(c).concat(E.filter(e=>e.weapon===c).map(wLabel))));
     if(!ms.length)return `<div class="sec"><span class="lbl">${esc(c)}</span><p class="status" style="margin:0">Noch keine Waffe. Im Formular unter „${esc(c)}“ über „+ Eigene Waffe“ eintragen.</p></div>`;
     return `<div class="sec"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px"><span class="lbl" style="margin:0">${esc(c)} (${ms.length})</span><button class="btn" type="button" data-addw="${esc(c)}">+ Waffe anlegen</button></div>
@@ -917,6 +917,8 @@ function viewWaffen(){
     const k=addWeapon(b.dataset.addok,m,nr,cal,{fav,pers:fav});store.saveSettings();renderProfile();toast(k+' angelegt');render()}));
   $('view').querySelectorAll('[data-akte]').forEach(b=>b.addEventListener('click',()=>{akteM=b.dataset.akte;location.hash='akte'}));
   $('view').querySelectorAll('[data-delw]').forEach(b=>b.addEventListener('click',()=>{akteM=b.dataset.delw;akteDel=true;location.hash='akte'}));
+  $('view').querySelectorAll('[data-pdfw]').forEach(b=>b.addEventListener('click',()=>{const m=b.dataset.pdfw;pdfW=pdfW===m?null:m;const y=window.scrollY;render();window.scrollTo(0,y);if(pdfW){const p=$('akPer');if(p)p.closest('div[style*="dashed"]').scrollIntoView({block:'nearest'})}}));
+  if(pdfW&&$('akPer'))bindPer(pdfW);
   $('view').querySelectorAll('[data-fav]').forEach(b=>b.addEventListener('click',()=>{toggleFav(b.dataset.fav);render()}));
   $('view').querySelectorAll('[data-ip]').forEach(b=>b.addEventListener('click',()=>{const i=b.parentElement.querySelector('input[type=date]');const d=i&&i.value;if(!d){toast('Bitte Datum wählen');return}
     S.insp=S.insp||{};const a=S.insp[b.dataset.ip]=S.insp[b.dataset.ip]||[];if(!a.includes(d))a.push(d);store.saveSettings();toast('Überprüfung eingetragen');render()}));
@@ -1194,7 +1196,35 @@ function viewImport(){
 }
 /* ---------- WAFFENAKTE ---------- */
 let akteM=null,akteDel=false;
-const AP={mode:'all'};
+const AP={mode:'all'};let pdfW=null;
+function perPanel(m,ev){return `<div style="border:1px dashed var(--sep);padding:10px 12px;margin:10px 0 14px">
+      <span class="lbl">Waffenakte als PDF drucken</span>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">
+        <div style="flex:1 1 200px;min-width:0"><label class="lbl" for="akPer">Zeitraum</label><select class="field" id="akPer">${[['all','Gesamte Waffenakte'],['year','Ein Jahr'],['month','Ein Monat'],['day','Ein Tag'],['range','Von – bis (frei wählbar)']].map(([v,t])=>`<option value="${v}"${AP.mode===v?' selected':''}>${t}</option>`).join('')}</select></div>
+        <div id="akPerBox" style="display:flex;flex-wrap:wrap;gap:10px;flex:2 1 260px;min-width:0"></div>
+      </div>
+      <p class="status" id="akPerInfo" style="margin-top:8px"></p>
+      <div class="row" style="margin-top:8px"><button class="btn solid" type="button" id="akPdf" ${ev.length?'':'disabled'}>Waffenakte als PDF</button></div>
+      <p class="err" id="akErr" hidden></p>
+    </div>`}
+function bindPer(m){const ev=akteEvents(m),A=akteStats(m);
+  const years=Array.from(new Set(ev.map(v=>(v.d||'').slice(0,4)).filter(y=>/^\d{4}$/.test(y)).concat([today().slice(0,4)]))).sort().reverse();
+  if(!AP.y||!years.includes(AP.y))AP.y=years[0];
+  const fld=(lbl,html)=>`<div style="flex:1 1 120px;min-width:0"><span class="lbl">${lbl}</span>${html}</div>`;
+  const perUI=()=>{const box=$('akPerBox');const mo=AP.mo||today().slice(5,7);
+    const ySel=`<select class="field" id="apY" aria-label="Jahr">${years.map(y=>`<option${AP.y===y?' selected':''}>${y}</option>`).join('')}</select>`;
+    box.innerHTML=AP.mode==='year'?fld('Jahr',ySel)
+      :AP.mode==='month'?fld('Monat',`<select class="field" id="apM" aria-label="Monat">${MONTHS.map((n,i)=>`<option value="${pad(i+1)}"${mo===pad(i+1)?' selected':''}>${n}</option>`).join('')}</select>`)+fld('Jahr',ySel)
+      :AP.mode==='day'?fld('Tag',`<input class="field" type="date" id="apD" value="${esc(AP.d||today())}">`)
+      :AP.mode==='range'?fld('Von',`<input class="field" type="date" id="apF" value="${esc(AP.from||(ev.length?ev[ev.length-1].d:today()))}">`)+fld('Bis',`<input class="field" type="date" id="apT" value="${esc(AP.to||today())}">`):'';
+    const rd=()=>{if($('apY'))AP.y=$('apY').value;if($('apM'))AP.mo=$('apM').value;if($('apD'))AP.d=$('apD').value;if($('apF'))AP.from=$('apF').value;if($('apT'))AP.to=$('apT').value;perInfo()};
+    box.querySelectorAll('select,input').forEach(i=>i.addEventListener('change',rd));rd()};
+  const perInfo=()=>{const R=perRange(),el=$('akPerInfo');if(R&&R.err){el.innerHTML='<span style="color:var(--warn)">'+esc(R.err)+'</span>';return}
+    const evF=R?ev.filter(v=>v.d>=R.from&&v.d<=R.to):ev;const sh=R?E.filter(e=>wLabel(e)===m&&e.date>=R.from&&e.date<=R.to).reduce((t,e)=>t+(+e.shots||0),0):A.shots;
+    el.textContent=(R?'Zeitraum '+R.label+': ':'Gesamte Akte: ')+evF.length+' Eintr'+(evF.length===1?'ag':'äge')+' · '+sh+' Schuss'+(R&&!evF.length?' – in diesem Zeitraum gibt es keine Einträge.':'')};
+  $('akPer').addEventListener('change',e=>{AP.mode=e.target.value;perUI()});perUI();
+  $('akPdf').addEventListener('click',()=>aktePdf(m));}
+
 function perRange(){const m=AP.mode;if(m==='all')return null;
   if(m==='year'){const y=AP.y||today().slice(0,4);return {from:y+'-01-01',to:y+'-12-31',label:'Jahr '+y,file:y}}
   if(m==='month'){const y=AP.y||today().slice(0,4),mo=AP.mo||today().slice(5,7);const last=new Date(+y,+mo,0).getDate();return {from:y+'-'+mo+'-01',to:y+'-'+mo+'-'+pad(last),label:MONTHS[+mo-1]+' '+y,file:y+'-'+mo}}
@@ -1255,16 +1285,7 @@ function viewAkte(){
     <div class="row" style="margin-top:12px"><button class="btn solid" type="button" id="akAdd">Eintragen</button></div>
   </div>
   <div class="sec"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span class="lbl" style="margin:0">Verlauf (${ev.length})</span></div>
-    <div style="border:1px dashed var(--sep);padding:10px 12px;margin:10px 0 14px">
-      <span class="lbl">Waffenakte als PDF drucken</span>
-      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">
-        <div style="flex:1 1 200px;min-width:0"><label class="lbl" for="akPer">Zeitraum</label><select class="field" id="akPer">${[['all','Gesamte Waffenakte'],['year','Ein Jahr'],['month','Ein Monat'],['day','Ein Tag'],['range','Von – bis (frei wählbar)']].map(([v,t])=>`<option value="${v}"${AP.mode===v?' selected':''}>${t}</option>`).join('')}</select></div>
-        <div id="akPerBox" style="display:flex;flex-wrap:wrap;gap:10px;flex:2 1 260px;min-width:0"></div>
-      </div>
-      <p class="status" id="akPerInfo" style="margin-top:8px"></p>
-      <div class="row" style="margin-top:8px"><button class="btn solid" type="button" id="akPdf" ${ev.length?'':'disabled'}>Waffenakte als PDF</button></div>
-      <p class="err" id="akErr" hidden></p>
-    </div>
+    ${perPanel(m,ev)}
     ${ev.length?ev.map((v,i)=>`<div class="tl"><span class="d">${esc(fmtD(v.d))}</span><span class="t"><b><span class="dot ${v.k}" aria-hidden="true"></span>${esc(v.t)}</b>${v.rmI||v.rmM!=null?`<button class="x" type="button" data-rmev="${i}" aria-label="Eintrag vom ${esc(fmtD(v.d))} entfernen" style="min-width:36px;min-height:36px">×</button>`:''}</span>${v.x?`<span class="x2">${esc(v.x)}</span>`:''}${v.stand!=null?`<span class="x2" style="color:var(--ac)">Schussstand der Waffe zu diesem Zeitpunkt: ${v.stand} Schuss</span>`:''}</div>`).join(''):'<p class="status">Noch keine Einträge. Schusstage, Störungen und Waffenmeister-Einträge erscheinen hier automatisch.</p>'}
   </div>
   <div class="sec"><span class="lbl">Waffe zusammenführen</span>
@@ -1300,22 +1321,7 @@ function viewAkte(){
   $('view').querySelectorAll('[data-rmev]').forEach(b=>b.addEventListener('click',()=>{const v=ev[+b.dataset.rmev];if(!v)return;
     if(v.rmI){const a=(S.insp||{})[m]||[];const i=a.indexOf(v.rmI);if(i>=0)a.splice(i,1)}else if(v.rmM!=null){const a=(S.maint||{})[m]||[];a.splice(v.rmM,1)}
     store.saveSettings();render()}));
-  const years=Array.from(new Set(ev.map(v=>(v.d||'').slice(0,4)).filter(y=>/^\d{4}$/.test(y)).concat([today().slice(0,4)]))).sort().reverse();
-  if(!AP.y||!years.includes(AP.y))AP.y=years[0];
-  const fld=(lbl,html)=>`<div style="flex:1 1 120px;min-width:0"><span class="lbl">${lbl}</span>${html}</div>`;
-  const perUI=()=>{const box=$('akPerBox');const mo=AP.mo||today().slice(5,7);
-    const ySel=`<select class="field" id="apY" aria-label="Jahr">${years.map(y=>`<option${AP.y===y?' selected':''}>${y}</option>`).join('')}</select>`;
-    box.innerHTML=AP.mode==='year'?fld('Jahr',ySel)
-      :AP.mode==='month'?fld('Monat',`<select class="field" id="apM" aria-label="Monat">${MONTHS.map((n,i)=>`<option value="${pad(i+1)}"${mo===pad(i+1)?' selected':''}>${n}</option>`).join('')}</select>`)+fld('Jahr',ySel)
-      :AP.mode==='day'?fld('Tag',`<input class="field" type="date" id="apD" value="${esc(AP.d||today())}">`)
-      :AP.mode==='range'?fld('Von',`<input class="field" type="date" id="apF" value="${esc(AP.from||(ev.length?ev[ev.length-1].d:today()))}">`)+fld('Bis',`<input class="field" type="date" id="apT" value="${esc(AP.to||today())}">`):'';
-    const rd=()=>{if($('apY'))AP.y=$('apY').value;if($('apM'))AP.mo=$('apM').value;if($('apD'))AP.d=$('apD').value;if($('apF'))AP.from=$('apF').value;if($('apT'))AP.to=$('apT').value;perInfo()};
-    box.querySelectorAll('select,input').forEach(i=>i.addEventListener('change',rd));rd()};
-  const perInfo=()=>{const R=perRange(),el=$('akPerInfo');if(R&&R.err){el.innerHTML='<span style="color:var(--warn)">'+esc(R.err)+'</span>';return}
-    const evF=R?ev.filter(v=>v.d>=R.from&&v.d<=R.to):ev;const sh=R?E.filter(e=>wLabel(e)===m&&e.date>=R.from&&e.date<=R.to).reduce((t,e)=>t+(+e.shots||0),0):A.shots;
-    el.textContent=(R?'Zeitraum '+R.label+': ':'Gesamte Akte: ')+evF.length+' Eintr'+(evF.length===1?'ag':'äge')+' · '+sh+' Schuss'+(R&&!evF.length?' – in diesem Zeitraum gibt es keine Einträge.':'')};
-  $('akPer').addEventListener('change',e=>{AP.mode=e.target.value;perUI()});perUI();
-  $('akPdf').addEventListener('click',()=>aktePdf(m));
+  bindPer(m);
   setStatus();
 }
 async function deleteWeapon(m){
